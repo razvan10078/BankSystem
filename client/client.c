@@ -119,14 +119,75 @@ void deposit()
 
 void showDebts()
 {
-    printf("Debts of user %s:",name);
-    while(1)
+    printf("Debts of user %s:\n",name);
+    char msg[BUFFER_SIZE];
+    int bytes_read=recv(tcp_sock,msg,sizeof(msg)-1,0);
+    if(bytes_read > 0)
     {
-        char msg[64];
-        int bytes_read=recv(tcp_sock,msg,sizeof(msg)-1,0);
         msg[bytes_read]=0;
-        if(strcmp(msg,"end")==0)break;
-        printf("%s\n",msg);
+        printf("%s",msg);
+    }
+}
+
+void getLoan()
+{
+    int numb,maximum=10000,bytes_read;
+    char buff[16];
+    bytes_read=recv(tcp_sock,buff,sizeof(buff)-1,0);
+    buff[bytes_read]=0;
+    if(strcmp(buff,"unable")==0)
+    {
+        printf("Too many existing loans\n");
+    }
+    else
+    {
+        printf("In how many days will you pay it back: ");
+        scanf("%d",&numb);
+        getchar();
+        if(numb<=30)
+        {
+            printf("Max loan: 1000\n");
+            maximum=1000;
+        }
+        else if(numb<=90)
+        {
+            printf("Max loan: 5000\n");
+            maximum=5000;
+        }
+        else if(numb<=180)
+        {
+            printf("Max loan: 10000\n");
+            maximum=10000;
+        }
+        int ln;
+        printf("How much do you want to loan: ");
+        while(1)
+        {
+            scanf("%d",&ln);
+            getchar();
+            if(ln<=maximum && ln>0)break;
+        }
+        char msg[32];
+        snprintf(msg,sizeof(msg),"%d,%d",ln,numb);
+        send(tcp_sock,msg,strlen(msg),0);
+        printf("Money added to balance\n");
+    }
+}
+
+void payLoan()
+{
+    int sm;
+    printf("How much do you want to pay back: ");
+    scanf("%d",&sm);
+    getchar();
+    char buff[16];
+    snprintf(buff,sizeof(buff),"%d",sm);
+    send(tcp_sock,buff,strlen(buff),0);
+    int bytes_read=recv(tcp_sock,buff,sizeof(buff)-1,0);
+    buff[bytes_read]=0;
+    if(strcmp(buff,"unable")==0)
+    {
+        printf("Not enough money in the balance to pay\n");
     }
 }
 
@@ -196,7 +257,7 @@ int main()
         char input[10];
         fgets(input,sizeof(input),stdin);
         char optiune = input[0];
-        if(optiune=='5')break;
+        if(optiune=='7')break;
         send(tcp_sock,&optiune,sizeof(optiune),0);
         if(optiune=='1')
         {
@@ -213,6 +274,14 @@ int main()
         else if(optiune=='4')
         {
             showDebts();
+        }
+        else if(optiune=='5')
+        {
+            getLoan();
+        }
+        else if(optiune=='6')
+        {
+            payLoan();
         }
     }
     close(tcp_sock);
