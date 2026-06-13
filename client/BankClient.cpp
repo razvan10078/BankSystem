@@ -58,6 +58,7 @@ std::string BankClient::sendRequest(const std::string& request)
 bool BankClient::login(const std::string& username, const std::string& password) 
 {
     send(tcp_sock, "login", 5, 0);
+    usleep(50000);
     std::string packet = username + ":" + password;
     std::string response = sendRequest(packet);
     return response == "Success";
@@ -66,6 +67,7 @@ bool BankClient::login(const std::string& username, const std::string& password)
 bool BankClient::registerUser(const std::string& username, const std::string& password) 
 {
     send(tcp_sock, "register", 8, 0);
+    usleep(50000);
     std::string packet = username + ":" + password;
     std::string response = sendRequest(packet);
     return response == "Success";

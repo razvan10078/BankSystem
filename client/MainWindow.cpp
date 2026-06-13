@@ -69,18 +69,27 @@ void MainWindow::setupDashboardPage()
     balanceBtn = new QPushButton("Check Balance");
     withdrawBtn = new QPushButton("Withdraw");
     depositBtn = new QPushButton("Deposit");
+    debtsBtn = new QPushButton("Show Debts");
+    getLoanBtn = new QPushButton("Get Loan");
+    payLoanBtn = new QPushButton("Pay Loan");
     logoutBtn = new QPushButton("Logout");
 
     layout->addWidget(welcomeLabel);
     layout->addWidget(balanceBtn);
     layout->addWidget(withdrawBtn);
     layout->addWidget(depositBtn);
+    layout->addWidget(debtsBtn);
+    layout->addWidget(getLoanBtn);
+    layout->addWidget(payLoanBtn);
     layout->addStretch();
     layout->addWidget(logoutBtn);
 
     connect(balanceBtn, &QPushButton::clicked, this, &MainWindow::showBalance);
     connect(withdrawBtn, &QPushButton::clicked, this, &MainWindow::handleWithdraw);
     connect(depositBtn, &QPushButton::clicked, this, &MainWindow::handleDeposit);
+    connect(debtsBtn, &QPushButton::clicked, this, &MainWindow::handleShowDebts);
+    connect(getLoanBtn, &QPushButton::clicked, this, &MainWindow::handleGetLoan);
+    connect(payLoanBtn, &QPushButton::clicked, this, &MainWindow::handlePayLoan);
     connect(logoutBtn, &QPushButton::clicked, this, &MainWindow::handleLogout);
 
     stackedWidget->addWidget(dashboardPage);
@@ -117,7 +126,11 @@ void MainWindow::handleRegister()
 
     if (bankClient->registerUser(user, pass)) 
     {
-        QMessageBox::information(this, "Success", "Registration successful! You can now log in.");
+        QMessageBox::information(this, "Success", "Registration successful!");
+        welcomeLabel->setText("<h3>Welcome, " + QString::fromStdString(user) + "</h3>");
+        stackedWidget->setCurrentWidget(dashboardPage); 
+        userEdit->clear();
+        passEdit->clear();
     } 
     else 
     {
@@ -152,7 +165,38 @@ void MainWindow::handleDeposit()
         QMessageBox::information(this, "Transaction Result", QString::fromStdString(response));
     }
 }
+void MainWindow::handleShowDebts() 
+{
+    std::string debts = bankClient->getDebts();
+    QMessageBox::information(this, "Your Debts", QString::fromStdString(debts));
+}
 
+void MainWindow::handleGetLoan() 
+{
+    bool okAmount;
+    int amount = QInputDialog::getInt(this, "Get Loan", "Enter loan amount:", 0, 1, 10000, 1, &okAmount);
+    if (okAmount) 
+    {
+        bool okDays;
+        int days = QInputDialog::getInt(this, "Get Loan", "Days to repay:", 30, 1, 180, 1, &okDays);
+        if (okDays) 
+        {
+            std::string response = bankClient->getLoan(amount, days);
+            QMessageBox::information(this, "Loan Status", QString::fromStdString(response));
+        }
+    }
+}
+
+void MainWindow::handlePayLoan() 
+{
+    bool ok;
+    int amount = QInputDialog::getInt(this, "Pay Loan", "Enter amount to pay back:", 0, 1, 100000, 1, &ok);
+    if (ok) 
+    {
+        std::string response = bankClient->payLoan(amount);
+        QMessageBox::information(this, "Payment Status", QString::fromStdString(response));
+    }
+}
 void MainWindow::handleLogout() 
 {
     stackedWidget->setCurrentWidget(loginPage);

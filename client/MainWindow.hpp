@@ -28,6 +28,9 @@ private slots:
     void handleWithdraw();
     void handleDeposit();
     void handleLogout();
+    void handleShowDebts();
+    void handleGetLoan();
+    void handlePayLoan();
 
 private:
     BankClient* bankClient;
@@ -45,6 +48,9 @@ private:
     QPushButton* balanceBtn;
     QPushButton* withdrawBtn;
     QPushButton* depositBtn;
+    QPushButton* debtsBtn;
+    QPushButton* getLoanBtn;
+    QPushButton* payLoanBtn;
     QPushButton* logoutBtn;
 
     void setupLoginPage();
