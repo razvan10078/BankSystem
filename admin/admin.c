@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <sys/select.h>
 #include <signal.h>
+#include <time.h>
 
 #define DISCOVERY_PORT 8888
 #define TCP_PORT 9999
@@ -24,6 +25,7 @@ typedef struct detail{
     int imprumut[10];
     int zileScadente[10];
     int nrImprumuturi;
+    time_t momentImprumut[10];
 }detail;
 
 detail d;
@@ -200,6 +202,7 @@ void getLoan()
         d.sumaCont+=imp;
         d.imprumut[d.nrImprumuturi]=imp;
         d.zileScadente[d.nrImprumuturi]=days;
+        d.momentImprumut[d.nrImprumuturi]=time(NULL);
         d.nrImprumuturi++;
         lseek(accountD,-(off_t)sizeof(d),SEEK_CUR);
         write(accountD,&d,sizeof(d));
@@ -239,6 +242,7 @@ void payLoan()
                 }
                 d.imprumut[remaining_loans] = d.imprumut[i];
                 d.zileScadente[remaining_loans] = d.zileScadente[i];
+                d.momentImprumut[remaining_loans] = d.momentImprumut[i];
                 remaining_loans++;
             }
         }
@@ -325,6 +329,91 @@ void handle_client() {
     exit(0);
 }
 
+void updateDebts() {
+    int fd = open(".account_details", O_RDWR);
+    if (fd < 0) 
+    {
+        perror("Failed to open account details for updating");
+        return; 
+    }
+    detail d;
+    time_t curTime = time(NULL);
+    int trunc = 0;
+    while (read(fd, &d, sizeof(detail)) == sizeof(detail)) 
+    {
+        if (d.name[0] == '\0') continue;
+        int record_updated = 0;
+        int close_account = 0;
+        for (int i = 0; i < d.nrImprumuturi; i++) 
+        {
+            double elapsed_seconds = difftime(curTime, d.momentImprumut[i]);
+            int days_passed = (int)(elapsed_seconds / 86400);
+            
+            if (days_passed > 0) 
+            {
+                d.zileScadente[i] -= days_passed;
+                d.momentImprumut[i] += (days_passed * 86400);
+                
+                if (d.zileScadente[i] < 0)
+                {
+                    if(d.zileScadente[i] < -2)
+                    {
+                        if(d.sumaCont >= d.imprumut[i])
+                        {
+                            d.sumaCont -= d.imprumut[i];
+                            for (int j = i; j < d.nrImprumuturi-1; j++)
+                            {
+                                d.imprumut[j] = d.imprumut[j+1];
+                                d.zileScadente[j] = d.zileScadente[j+1]; 
+                                d.momentImprumut[j] = d.momentImprumut[j+1]; 
+                            }
+                            d.nrImprumuturi--;
+                            i--;
+                        }
+                        else close_account = 1;
+                    }
+                    else
+                    {
+                        d.imprumut[i]+=d.imprumut[i]/20;
+                    }
+                }
+                record_updated = 1;
+            }
+        }
+        
+        if (close_account)
+        {
+            memset(&d, 0, sizeof(detail)); 
+            lseek(fd, -(off_t)sizeof(detail), SEEK_CUR);
+            write(fd, &d, sizeof(detail));
+            trunc = 1;
+        }
+        else if (record_updated) 
+        {
+            lseek(fd, -(off_t)sizeof(detail), SEEK_CUR);
+            write(fd, &d, sizeof(detail));
+        }
+    }
+    if (trunc) 
+    {
+        lseek(fd, 0, SEEK_SET); 
+        off_t write_pos = 0;
+        while (read(fd, &d, sizeof(detail)) == sizeof(detail)) 
+        {
+            if (d.name[0] != '\0') 
+            {
+                off_t current_read_pos = lseek(fd, 0, SEEK_CUR); 
+                lseek(fd, write_pos, SEEK_SET);
+                write(fd, &d, sizeof(detail));
+                write_pos += sizeof(detail);
+                lseek(fd, current_read_pos, SEEK_SET);
+            }
+        }
+        ftruncate(fd, write_pos);
+    }
+    close(fd);
+}
+
 int main() 
 {
     signal(SIGCHLD, SIG_IGN); 
@@ -361,6 +450,15 @@ int main()
     printf("[Admin] Server running. Listening for UDP discovery and TCP connections...\n");
     fd_set readfds;
     int max_sd = (udp_sock > tcp_sock) ? udp_sock : tcp_sock;
+    if (fork() == 0) 
+    {
+        while(1) 
+        {
+            updateDebts();
+            sleep(86400);
+        }
+        exit(0);
+    }
     while (1) 
     {
         FD_ZERO(&readfds);
@@ -379,7 +477,7 @@ int main()
             if (strcmp(buffer, "DISCOVER_ADMIN") == 0) 
             {
                 printf("[Admin] Discovery request received from %s:%d\n", 
-                       inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+                inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
                 const char *reply = "CONFIRM";
                 sendto(udp_sock, reply, strlen(reply), 0, (struct sockaddr*)&client_addr, client_len);
             }
