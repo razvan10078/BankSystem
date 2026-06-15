@@ -23,6 +23,8 @@ public:
     std::string getDebts();
     std::string getLoan(int amount, int days);
     std::string payLoan(int amount);
+    std::string transferFindDest(const std::string& dest);
+    std::string transferSendMoney(const std::string& dest, int amount);
 
 private:
     int tcp_sock;

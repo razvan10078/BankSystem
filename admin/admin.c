@@ -254,6 +254,80 @@ void payLoan()
     write(accountD,&d,sizeof(d));
 }
 
+void transferFindDest()
+{
+    char buf[32],msg[32];
+    int bytes_read;
+    bytes_read=recv(client_sock,buf,sizeof(buf)-1,0);
+    buf[bytes_read]=0;
+    buf[strcspn(buf, "\r\n ")] = '\0';
+    detail det;
+    int found=0;
+    int fd = open(".account_details", O_RDWR);
+    if (fd < 0)
+    {
+        perror("Failed to open account details for updating");
+        return; 
+    }
+    while(read(fd, &det, sizeof(detail)) == sizeof(detail))
+    {
+        if(strcmp(det.name,buf)==0){found=1;break;}
+    }
+    close(fd);
+    if(!found)
+    {
+        snprintf(msg, sizeof(msg), "not found");
+        send(client_sock, msg, strlen(msg), 0);
+        return;
+    }
+    snprintf(msg, sizeof(msg), "found");
+    send(client_sock, msg, strlen(msg), 0);
+}
+
+void transferSendMoney()
+{
+    char nameDest[32],buf[32],msg[32];
+    int bytes_read = recv(client_sock, nameDest, sizeof(nameDest)-1, 0);
+    nameDest[bytes_read]=0;
+    buf[strcspn(nameDest, "\r\n ")] = '\0';
+    snprintf(msg,sizeof(msg),"rec");
+    send(client_sock, msg, strlen(msg), 0);
+    detail det;
+    int fd = open(".account_details", O_RDWR);
+    if (fd < 0)
+    {
+        perror("Failed to open account details for updating");
+        return; 
+    }
+    while(read(fd, &det, sizeof(detail)) == sizeof(detail))
+    {
+        if(strcmp(det.name,nameDest)==0)break;
+    }
+    bytes_read = recv(client_sock, buf, sizeof(buf)-1, 0);
+    buf[bytes_read]=0;
+    int sm=atoi(buf);
+    if(d.sumaCont<sm)
+    {
+        snprintf(msg,sizeof(msg),"Insufficient funds");
+        send(client_sock,msg,strlen(msg),0);
+        return;
+    }
+    det.sumaCont+=sm;
+    d.sumaCont-=sm;
+    lseek(fd, -(off_t)sizeof(detail), SEEK_CUR);
+    write(fd, &det, sizeof(detail));
+    lseek(fd, 0, SEEK_SET);
+    while(read(fd, &det, sizeof(detail)) == sizeof(detail))
+    {
+        if(strcmp(det.name,d.name)==0)break;
+    }
+    lseek(fd, -(off_t)sizeof(detail), SEEK_CUR);
+    write(fd, &d, sizeof(detail));
+    snprintf(msg,sizeof(msg),"Transfer success");
+    send(client_sock,msg,strlen(msg),0);
+    close(fd);
+}
+
 void handle_client() {
     char buffer[BUFFER_SIZE];
     int bytes_read;
@@ -323,6 +397,14 @@ void handle_client() {
         {
             payLoan();
         }
+        else if(optiune=='7')
+        {
+            transferFindDest();
+        }
+        else if(optiune=='8')
+        {
+            transferSendMoney();
+        }
     }
     close(accountD);
     close(client_sock);
@@ -336,45 +418,45 @@ void updateDebts() {
         perror("Failed to open account details for updating");
         return; 
     }
-    detail d;
+    detail det;
     time_t curTime = time(NULL);
     int trunc = 0;
-    while (read(fd, &d, sizeof(detail)) == sizeof(detail)) 
+    while (read(fd, &det, sizeof(detail)) == sizeof(detail)) 
     {
-        if (d.name[0] == '\0') continue;
+        if (det.name[0] == '\0') continue;
         int record_updated = 0;
         int close_account = 0;
-        for (int i = 0; i < d.nrImprumuturi; i++) 
+        for (int i = 0; i < det.nrImprumuturi; i++) 
         {
-            double elapsed_seconds = difftime(curTime, d.momentImprumut[i]);
+            double elapsed_seconds = difftime(curTime, det.momentImprumut[i]);
             int days_passed = (int)(elapsed_seconds / 86400);
             
             if (days_passed > 0) 
             {
-                d.zileScadente[i] -= days_passed;
-                d.momentImprumut[i] += (days_passed * 86400);
+                det.zileScadente[i] -= days_passed;
+                det.momentImprumut[i] += (days_passed * 86400);
                 
-                if (d.zileScadente[i] < 0)
+                if (det.zileScadente[i] < 0)
                 {
-                    if(d.zileScadente[i] < -2)
+                    if(det.zileScadente[i] < -2)
                     {
-                        if(d.sumaCont >= d.imprumut[i])
+                        if(det.sumaCont >= det.imprumut[i])
                         {
-                            d.sumaCont -= d.imprumut[i];
-                            for (int j = i; j < d.nrImprumuturi-1; j++)
+                            det.sumaCont -= det.imprumut[i];
+                            for (int j = i; j < det.nrImprumuturi-1; j++)
                             {
-                                d.imprumut[j] = d.imprumut[j+1];
-                                d.zileScadente[j] = d.zileScadente[j+1]; 
-                                d.momentImprumut[j] = d.momentImprumut[j+1]; 
+                                det.imprumut[j] = det.imprumut[j+1];
+                                det.zileScadente[j] = det.zileScadente[j+1]; 
+                                det.momentImprumut[j] = det.momentImprumut[j+1]; 
                             }
-                            d.nrImprumuturi--;
+                            det.nrImprumuturi--;
                             i--;
                         }
                         else close_account = 1;
                     }
                     else
                     {
-                        d.imprumut[i]+=d.imprumut[i]/20;
+                        det.imprumut[i]+=det.imprumut[i]/20;
                     }
                 }
                 record_updated = 1;
@@ -385,26 +467,26 @@ void updateDebts() {
         {
             memset(&d, 0, sizeof(detail)); 
             lseek(fd, -(off_t)sizeof(detail), SEEK_CUR);
-            write(fd, &d, sizeof(detail));
+            write(fd, &det, sizeof(detail));
             trunc = 1;
         }
         else if (record_updated) 
         {
             lseek(fd, -(off_t)sizeof(detail), SEEK_CUR);
-            write(fd, &d, sizeof(detail));
+            write(fd, &det, sizeof(detail));
         }
     }
     if (trunc) 
     {
         lseek(fd, 0, SEEK_SET); 
         off_t write_pos = 0;
-        while (read(fd, &d, sizeof(detail)) == sizeof(detail)) 
+        while (read(fd, &det, sizeof(detail)) == sizeof(detail)) 
         {
-            if (d.name[0] != '\0') 
+            if (det.name[0] != '\0') 
             {
                 off_t current_read_pos = lseek(fd, 0, SEEK_CUR); 
                 lseek(fd, write_pos, SEEK_SET);
-                write(fd, &d, sizeof(detail));
+                write(fd, &det, sizeof(detail));
                 write_pos += sizeof(detail);
                 lseek(fd, current_read_pos, SEEK_SET);
             }

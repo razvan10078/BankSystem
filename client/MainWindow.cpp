@@ -3,7 +3,7 @@
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) 
 {
     setWindowTitle("Bank System Client");
-    resize(400, 300);
+    resize(800, 600);
 
     bankClient = new BankClient();
     
@@ -69,6 +69,7 @@ void MainWindow::setupDashboardPage()
     balanceBtn = new QPushButton("Check Balance");
     withdrawBtn = new QPushButton("Withdraw");
     depositBtn = new QPushButton("Deposit");
+    transferBtn = new QPushButton("Transfer");
     debtsBtn = new QPushButton("Show Debts");
     getLoanBtn = new QPushButton("Get Loan");
     payLoanBtn = new QPushButton("Pay Loan");
@@ -78,6 +79,7 @@ void MainWindow::setupDashboardPage()
     layout->addWidget(balanceBtn);
     layout->addWidget(withdrawBtn);
     layout->addWidget(depositBtn);
+    layout->addWidget(transferBtn);
     layout->addWidget(debtsBtn);
     layout->addWidget(getLoanBtn);
     layout->addWidget(payLoanBtn);
@@ -87,6 +89,7 @@ void MainWindow::setupDashboardPage()
     connect(balanceBtn, &QPushButton::clicked, this, &MainWindow::showBalance);
     connect(withdrawBtn, &QPushButton::clicked, this, &MainWindow::handleWithdraw);
     connect(depositBtn, &QPushButton::clicked, this, &MainWindow::handleDeposit);
+    connect(transferBtn, &QPushButton::clicked, this, &MainWindow::handleTransfer);
     connect(debtsBtn, &QPushButton::clicked, this, &MainWindow::handleShowDebts);
     connect(getLoanBtn, &QPushButton::clicked, this, &MainWindow::handleGetLoan);
     connect(payLoanBtn, &QPushButton::clicked, this, &MainWindow::handlePayLoan);
@@ -197,7 +200,37 @@ void MainWindow::handlePayLoan()
         QMessageBox::information(this, "Payment Status", QString::fromStdString(response));
     }
 }
+
+void MainWindow::handleTransfer()
+{
+    bool ok;
+    QString qname = QInputDialog::getText(this, "Transfer", "Enter name:", QLineEdit::Normal, "", &ok);
+    if(ok && !qname.isEmpty())
+    {
+        std::string name = qname.toStdString();
+        std::string response = bankClient->transferFindDest(name);
+        if(response == "User not found") QMessageBox::information(this, "Transfer status", QString::fromStdString(response));
+        else
+        {
+            bool okAmount;
+            int amount = QInputDialog::getInt(this, "Transfer amount", "Enter amount to transfer:", 0, 1, 100000, 1, &okAmount);
+            if (okAmount)
+            {
+                std::string response = bankClient->transferSendMoney(name,amount);
+                QMessageBox::information(this, "Transfer status", QString::fromStdString(response));
+            }
+        }
+    }
+}
+
 void MainWindow::handleLogout() 
 {
+    bankClient->disconnect();
+    if(!bankClient->connectToServer()) 
+    {
+        QMessageBox::critical(this, "Connection Error", "Lost connection to the server during logout.");
+    }
+    userEdit->clear();
+    passEdit->clear();
     stackedWidget->setCurrentWidget(loginPage);
 }

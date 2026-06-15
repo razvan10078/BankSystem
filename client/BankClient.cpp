@@ -154,6 +154,47 @@ std::string BankClient::payLoan(int amount)
     return "Error processing payment";
 }
 
+std::string BankClient::transferFindDest(const std::string& dest)
+{
+    char opt = '7';
+    send(tcp_sock, &opt, 1, 0);
+    
+    send(tcp_sock, dest.c_str(), dest.length(), 0);
+    char buffer[1024];
+    int bytes_read = recv(tcp_sock, buffer, 1023, 0);
+    if (bytes_read > 0)
+    {
+        buffer[bytes_read] = '\0';
+        if(strcmp(buffer, "not found")==0) return "User not found";
+        return "User found";
+    }
+    return "Error searching user";
+}
+
+std::string BankClient::transferSendMoney(const std::string& dest,int amount)
+{
+    char opt = '8';
+    send(tcp_sock, &opt, 1, 0);
+
+    send(tcp_sock, dest.c_str(), dest.length(), 0);
+    char buffer[1024];
+    int bytes_read = recv(tcp_sock, buffer, 1023, 0);
+    std::string amount_str = std::to_string(amount);
+    if (bytes_read > 0)
+    {
+        send(tcp_sock, amount_str.c_str(), amount_str.length(), 0);
+        bytes_read = recv(tcp_sock, buffer, 1023, 0);
+        if(bytes_read > 0)
+        {
+            buffer[bytes_read] = '\0';
+            if(strcmp(buffer,"Insufficient funds") == 0) return "Insufficient funds";
+            return "Transfer success";
+        }
+        return "Error sending money";
+    }
+    return "Error sending user information";
+}
+
 void BankClient::disconnect() 
 {
     if (tcp_sock != -1) 
